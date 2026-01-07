@@ -1,57 +1,70 @@
+import axios from "axios";
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api/v1";
 
-// Helper function to get auth token from cookies
-const getToken = () => {
-  if (typeof window !== "undefined") {
-    const cookies = document.cookie.split(";");
-    const tokenCookie = cookies.find((cookie) => cookie.trim().startsWith("token="));
-    return tokenCookie ? tokenCookie.split("=")[1] : null;
-  }
-  return null;
-};
+// Create axios instance with default config
+const axiosInstance = axios.create({
+  baseURL: API_BASE_URL,
+  withCredentials: true, // Important for cookies
+  headers: {
+    "Content-Type": "application/json",
+  },
+});
 
 // Helper function to make API requests
 const apiRequest = async (endpoint, options = {}) => {
-  const token = getToken();
-  const url = `${API_BASE_URL}${endpoint}`;
-
-  const config = {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-    credentials: "include", // Important for cookies
-  };
-
-  const response = await fetch(url, config);
-  const data = await response.json();
-
-  if (!response.ok) {
-    throw new Error(data.message || "An error occurred");
+  try {
+    const response = await axiosInstance({
+      url: endpoint,
+      method: options.method || "GET",
+      data: options.body ? JSON.parse(options.body) : options.data,
+      params: options.params,
+      headers: {
+        ...options.headers,
+      },
+    });
+    return response.data;
+  } catch (error) {
+    if (error.response) {
+      // Server responded with error status
+      throw new Error(error.response.data?.message || "An error occurred");
+    } else if (error.request) {
+      // Request made but no response received
+      throw new Error("Network error. Please check your connection.");
+    } else {
+      // Something else happened
+      throw new Error(error.message || "An error occurred");
+    }
   }
-
-  return data;
 };
 
 // Auth API
 export const authAPI = {
-  login: async (email, password) => {
+  login: async (credentials) => {
     return apiRequest("/auth/login", {
       method: "POST",
-      body: JSON.stringify({ email, password }),
+      data: credentials,
     });
   },
 
   signup: async (userData) => {
     return apiRequest("/auth/signup", {
       method: "POST",
-      body: JSON.stringify(userData),
+      data: userData,
     });
   },
 
   logout: async () => {
     return apiRequest("/auth/logout", {
+      method: "GET",
+    });
+  },
+};
+
+// User API
+export const userAPI = {
+  getUser: async () => {
+    return apiRequest("/user", {
       method: "GET",
     });
   },
@@ -63,15 +76,15 @@ export const gameAPI = {
   createGame: async (gameData) => {
     return apiRequest("/game", {
       method: "POST",
-      body: JSON.stringify(gameData),
+      data: gameData,
     });
   },
 
   // List all approved games
   listAllGames: async (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`/game?${queryString}`, {
+    return apiRequest("/game", {
       method: "GET",
+      params: params,
     });
   },
 
@@ -84,17 +97,17 @@ export const gameAPI = {
 
   // List pending games (admin only)
   listPendingGames: async (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`/game/pending?${queryString}`, {
+    return apiRequest("/game/pending", {
       method: "GET",
+      params: params,
     });
   },
 
   // List developer's games (developer only)
   listDeveloperGames: async (params = {}) => {
-    const queryString = new URLSearchParams(params).toString();
-    return apiRequest(`/game/developerlist?${queryString}`, {
+    return apiRequest("/game/developerlist", {
       method: "GET",
+      params: params,
     });
   },
 
@@ -102,7 +115,7 @@ export const gameAPI = {
   updateGame: async (gameId, gameData) => {
     return apiRequest(`/game/${gameId}`, {
       method: "PATCH",
-      body: JSON.stringify(gameData),
+      data: gameData,
     });
   },
 
@@ -120,7 +133,7 @@ export const reviewAPI = {
   createReview: async (reviewData) => {
     return apiRequest("/game/review", {
       method: "POST",
-      body: JSON.stringify(reviewData),
+      data: reviewData,
     });
   },
 
@@ -128,7 +141,7 @@ export const reviewAPI = {
   updateReview: async (reviewId, reviewData) => {
     return apiRequest(`/game/review/${reviewId}`, {
       method: "PATCH",
-      body: JSON.stringify(reviewData),
+      data: reviewData,
     });
   },
 
@@ -140,3 +153,21 @@ export const reviewAPI = {
   },
 };
 
+// --- START OF ADDED PAYMENT API SECTION ---
+export const paymentAPI = {
+  // Create Razorpay Order for Lifetime Subscription
+  createOrder: async () => {
+    return apiRequest("/payments/createOrder", {
+      method: "POST",
+    });
+  },
+
+  // Verify Payment Signature and Upgrade User
+  verifyPayment: async (paymentData) => {
+    return apiRequest("/payments/verifyPayment", {
+      method: "POST",
+      data: paymentData,
+    });
+  },
+};
+// --- END OF ADDED PAYMENT API SECTION ---

@@ -11,6 +11,10 @@ import DeleteIcon from "@mui/icons-material/Delete";
 export default function DeveloperDashboard() {
   const router = useRouter();
   const theme = useTheme();
+  
+  // --- AUTH CHECK ADDED ---
+  const { user, loading: authLoading } = useSelector((state) => state.auth);
+
   const [games, setGames] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -18,9 +22,21 @@ export default function DeveloperDashboard() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
 
+  // --- REDIRECT LOGIC ADDED ---
   useEffect(() => {
-    fetchGames();
-  }, [page]);
+    if (!authLoading && !user) {
+      router.push("/login");
+    } else if (user && user.suscription !== "premium") {
+      // Redirect to home if they don't have the lifetime subscription
+      router.push("/");
+    }
+  }, [user, authLoading, router]);
+
+  useEffect(() => {
+    if (user && user.suscription === "premium") {
+      fetchGames();
+    }
+  }, [page, user]);
 
   const fetchGames = async () => {
     setLoading(true);
@@ -55,8 +71,14 @@ export default function DeveloperDashboard() {
     }
   };
 
-  if (loading && games.length === 0) {
+  // --- LOADER MODIFIED TO INCLUDE AUTH LOADING ---
+  if ((loading || authLoading) && games.length === 0) {
     return <Loader fullscreen />;
+  }
+
+  // --- PREVENT RENDER IF NOT PREMIUM ---
+  if (!user || user.suscription !== "premium") {
+    return null;
   }
 
   return (
@@ -154,4 +176,3 @@ export default function DeveloperDashboard() {
     </Box>
   );
 }
-

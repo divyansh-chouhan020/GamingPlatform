@@ -1,15 +1,14 @@
 import Head from "next/head";
 import { useState, useEffect } from "react";
-import { useDispatch} from "react-redux";
-import { Box, Typography, Grid } from "@mui/material";
+import { useDispatch } from "react-redux";
+import { Box, Typography, Grid, Paper } from "@mui/material"; // Added Paper for the banner
 import { setTheme } from "@/redux/slices/themeSlice";
 import Cookies from "js-cookie";
-import { gameAPI } from "@/services/api";
+import { gameAPI, paymentAPI } from "@/services/api"; // Added paymentAPI import
 import { GameCard } from "@/components/common/gameComponents";
 import { Loader, Toast, Button } from "@/components/common/uiComponents";
 import Layout from "@/components/common/layoutComponent";
 import { Hero, GameCategory, PlatformFeatures } from "@/components/common/homeComponents";
-//import { GENRES } from "@/constants/genres";
 
 // Static game data for featured sections
 const featuredGames = [
@@ -77,6 +76,78 @@ export default function Home() {
     keyword: "",
   });
 
+  // --- START: RAZORPAY PAYMENT LOGIC ---
+  const handleLifetimeSubscription = async () => {
+    try {
+      // 1. Dynamic Script Loader
+      const loadScript = (src) => {
+        return new Promise((resolve) => {
+          const script = document.createElement("script");
+          script.src = src;
+          script.onload = () => resolve(true);
+          script.onerror = () => resolve(false);
+          document.body.appendChild(script);
+        });
+      };
+
+      const res = await loadScript("https://checkout.razorpay.com/v1/checkout.js");
+      if (!res) {
+        alert("Razorpay SDK failed to load. Please check your internet connection.");
+        return;
+      }
+
+      // 2. Create Order in Backend
+      const response = await paymentAPI.createOrder();
+      if (!response.success) {
+        throw new Error(response.message || "Could not create order");
+      }
+
+      const { order } = response;
+
+      // 3. Razorpay Options Configuration
+      const options = {
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID, // Enter your Public Key ID in .env.local
+        amount: order.amount,
+        currency: order.currency,
+        name: "CyberArena",
+        description: "Lifetime Premium Subscription",
+        order_id: order.id,
+        handler: async function (response) {
+          // 4. Verify Payment after User finishes popup
+          try {
+            const verification = await paymentAPI.verifyPayment({
+              order_id: response.razorpay_order_id,
+              payment_id: response.razorpay_payment_id,
+              signature: response.razorpay_signature,
+            });
+
+            if (verification.success) {
+              alert("Premium Activated! Welcome to the Arena.");
+              window.location.reload(); // Refresh to update user status
+            }
+          } catch (err) {
+            alert("Verification Failed: " + err.message);
+          }
+        },
+        prefill: {
+          name: "Gamer",
+          email: "gamer@example.com",
+        },
+        theme: {
+          color: "#00eeff",
+        },
+      };
+
+      const paymentObject = new window.Razorpay(options);
+      paymentObject.open();
+
+    } catch (err) {
+      setError(err.message || "Payment initialization failed");
+      setShowToast(true);
+    }
+  };
+  // --- END: RAZORPAY PAYMENT LOGIC ---
+
   useEffect(() => {
     const savedTheme = Cookies.get("theme");
     if (savedTheme) {
@@ -137,6 +208,37 @@ export default function Home() {
         <Box sx={{ width: "100%", minHeight: "100vh" }}>
           {/* Hero Section */}
           <Hero />
+
+          {/* Premium CTA Section (Added for Subscription) */}
+          <Box sx={{ maxWidth: "1200px", margin: "0 auto", px: { xs: 2, md: 6 }, mt: 4 }}>
+            <Paper 
+              elevation={0} 
+              sx={{ 
+                p: 4, 
+                borderRadius: "16px", 
+                background: "linear-gradient(90deg, #00eeff 0%, #7000ff 100%)",
+                display: "flex", 
+                flexDirection: { xs: "column", md: "row" },
+                alignItems: "center", 
+                justifyContent: "space-between",
+                gap: 2
+              }}
+            >
+              <Box>
+                <Typography variant="h5" sx={{ fontWeight: "bold", color: "#fff" }}>
+                  Unlock Unlimited Access
+                </Typography>
+                <Typography variant="body1" sx={{ color: "#fff", opacity: 0.9 }}>
+                  Get Lifetime Premium for just ₹999. No ads, exclusive games, and early access.
+                </Typography>
+              </Box>
+              <Button 
+                label="Upgrade to Premium" 
+                onClick={handleLifetimeSubscription}
+                sx={{ bgcolor: "#fff", color: "#000", "&:hover": { bgcolor: "#f0f0f0" } }}
+              />
+            </Paper>
+          </Box>
 
           {/* Featured Games Section */}
           <Box id="featured-games">
